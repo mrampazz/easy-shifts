@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import type { ScheduleRules, ShiftTime, ShiftTransitionRule } from '../../types';
+import type { ScheduleRules, ShiftTime } from '../../types';
 import { useSchedule } from '../../hooks/useSchedule';
 
 interface RulesConfigProps {
@@ -21,7 +21,7 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
     }
   }, [isOpen, rules]);
 
-  const handleChange = useCallback((key: keyof ScheduleRules, value: number | boolean | boolean[] | ShiftTime[] | ShiftTransitionRule[]) => {
+  const handleChange = useCallback((key: keyof ScheduleRules, value: number | boolean | boolean[] | ShiftTime[]) => {
     setLocalRules(prev => ({ ...prev, [key]: value }));
   }, []);
 
@@ -42,11 +42,14 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
       startTime: '08:00',
       endTime: '20:00',
       requiredStaff: 2,
+      minDaysOff: 0,
+      maxConsecutive: 5,
+      allowSameDayWith: [],
     };
     handleChange('shiftStartTimes', [...localRules.shiftStartTimes, newShift]);
   }, [localRules.shiftStartTimes, handleChange]);
 
-  const handleUpdateShift = useCallback((index: number, field: keyof ShiftTime, value: string | number | boolean[] | undefined) => {
+  const handleUpdateShift = useCallback((index: number, field: keyof ShiftTime, value: string | number | boolean[] | number[] | undefined) => {
     const updatedShifts = [...localRules.shiftStartTimes];
     
     if (value === undefined) {
@@ -67,60 +70,17 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
       return;
     }
     const updatedShifts = localRules.shiftStartTimes.filter((_, i) => i !== index);
-    handleChange('shiftStartTimes', updatedShifts);
     
-    // Remove any transition rules involving this shift
-    const updatedRules = (localRules.shiftTransitionRules || []).filter(
-      rule => rule.fromShiftIndex !== index && rule.toShiftIndex !== index
-    ).map(rule => ({
-      ...rule,
-      fromShiftIndex: rule.fromShiftIndex > index ? rule.fromShiftIndex - 1 : rule.fromShiftIndex,
-      toShiftIndex: rule.toShiftIndex > index ? rule.toShiftIndex - 1 : rule.toShiftIndex,
+    // Update allowSameDayWith arrays in remaining shifts to remove deleted index and adjust others
+    const adjustedShifts = updatedShifts.map(shift => ({
+      ...shift,
+      allowSameDayWith: shift.allowSameDayWith
+        .filter(idx => idx !== index) // Remove deleted index
+        .map(idx => idx > index ? idx - 1 : idx) // Adjust indices
     }));
-    handleChange('shiftTransitionRules', updatedRules);
-  }, [localRules.shiftStartTimes, localRules.shiftTransitionRules, handleChange]);
-
-  const handleUpdateTransitionRule = useCallback((fromIndex: number, toIndex: number, field: keyof ShiftTransitionRule, value: boolean | number | undefined) => {
-    const currentRules = localRules.shiftTransitionRules || [];
-    const ruleIndex = currentRules.findIndex(
-      r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
-    );
     
-    if (ruleIndex >= 0) {
-      const updatedRules = [...currentRules];
-      if (value === undefined) {
-        // Remove the field from the rule
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { [field]: _, ...rest } = updatedRules[ruleIndex];
-        updatedRules[ruleIndex] = rest as ShiftTransitionRule;
-      } else {
-        updatedRules[ruleIndex] = { ...updatedRules[ruleIndex], [field]: value };
-      }
-      handleChange('shiftTransitionRules', updatedRules);
-    } else {
-      // Create new rule
-      const newRule: ShiftTransitionRule = {
-        fromShiftIndex: fromIndex,
-        toShiftIndex: toIndex,
-        sameDay: field === 'sameDay' ? value as boolean : false,
-        minDaysOff: field === 'minDaysOff' ? value as number : 0,
-        maxConsecutive: field === 'maxConsecutive' ? value as number : 0,
-      };
-      handleChange('shiftTransitionRules', [...currentRules, newRule]);
-    }
-  }, [localRules.shiftTransitionRules, handleChange]);
-
-  const getTransitionRule = useCallback((fromIndex: number, toIndex: number): ShiftTransitionRule => {
-    const rule = (localRules.shiftTransitionRules || []).find(
-      r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
-    );
-    return rule || { fromShiftIndex: fromIndex, toShiftIndex: toIndex, sameDay: false, minDaysOff: 0, maxConsecutive: 0 };
-  }, [localRules.shiftTransitionRules]);
-
-  const getShiftLabel = useCallback((index: number) => {
-    const shift = localRules.shiftStartTimes[index];
-    return `${shift.label} (${shift.startTime}-${shift.endTime})`;
-  }, [localRules.shiftStartTimes]);
+    handleChange('shiftStartTimes', adjustedShifts);
+  }, [localRules.shiftStartTimes, handleChange]);
 
   const handleExportJson = useCallback(() => {
     const json = JSON.stringify(localRules, null, 2);
@@ -166,8 +126,12 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
       className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <div 
+        className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - fixed at top */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between rounded-t-lg">
           <h2 className="text-2xl font-bold text-gray-800">Schedule Rules</h2>
           <button
             onClick={onClose}
@@ -177,8 +141,8 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {/* JSON Import/Export */}
+        {/* Scrollable content */}
+        <div className="overflow-y-auto flex-1 p-6 space-y-4">{/* JSON Import/Export */}
           <div className="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
             <h3 className="font-semibold text-gray-800 mb-2">Import/Export JSON</h3>
             <div className="flex gap-2 mb-2">
@@ -269,29 +233,21 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
 
         {/* Shift Times */}
         <div className="border-2 border-gray-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-700">Shift Times Configuration</h3>
-            <button
-              onClick={handleAddShift}
-              className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold py-1 px-3 rounded-md"
-            >
-              + Add Shift
-            </button>
-          </div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Shift Times Configuration</h3>
           
           <div className="space-y-3">
             {localRules.shiftStartTimes.map((shiftTime, index) => (
               <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-300 relative">
-                {/* Delete button in top right */}
+                {/* Delete button in top left */}
                 <button
                   onClick={() => handleDeleteShift(index)}
-                  className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold py-1 px-2 rounded"
+                  className="absolute top-2 left-2 bg-red-500 hover:bg-red-600 text-white text-xs font-semibold py-1 px-2 rounded"
                   title="Delete shift"
                 >
-                  🗑️ Delete
+                  🗑️
                 </button>
 
-                <div className="flex flex-col gap-3 pr-20">
+                <div className="flex flex-col gap-3 pl-12">
                   {/* Shift Label */}
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -440,105 +396,115 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
                       Dashed border = using global days. Solid = shift-specific override.
                     </p>
                   </div>
+
+                  {/* Shift Constraints */}
+                  <div className="border-t border-gray-300 pt-3 mt-3">
+                    <h4 className="text-xs font-semibold text-gray-700 mb-2">Shift Constraints</h4>
+                    
+                    {/* Min Days Off */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Min Days Off After This Shift
+                      </label>
+                      <input
+                        type="number"
+                        value={shiftTime.minDaysOff}
+                        onChange={(e) => handleUpdateShift(index, 'minDaysOff', parseInt(e.target.value) || 0)}
+                        min="0"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Required rest days after working this shift (0 = no requirement)
+                      </p>
+                    </div>
+
+                    {/* Max Consecutive */}
+                    <div className="mb-3">
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Max Consecutive Times
+                      </label>
+                      <input
+                        type="number"
+                        value={shiftTime.maxConsecutive}
+                        onChange={(e) => handleUpdateShift(index, 'maxConsecutive', parseInt(e.target.value) || 0)}
+                        min="0"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Maximum consecutive times this shift can be worked (0 = not allowed consecutive)
+                      </p>
+                    </div>
+
+                    {/* Allow Same Day With */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Allow Same-Day Double Shifts With:
+                      </label>
+                      <div className="space-y-2">
+                        {localRules.shiftStartTimes.map((otherShift, otherIndex) => {
+                          if (otherIndex === index) return null; // Don't show self
+                          const isChecked = shiftTime.allowSameDayWith.includes(otherIndex);
+                          return (
+                            <label key={otherIndex} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  const newAllowSameDayWith = e.target.checked
+                                    ? [...shiftTime.allowSameDayWith, otherIndex].sort((a, b) => a - b)
+                                    : shiftTime.allowSameDayWith.filter(i => i !== otherIndex);
+                                  handleUpdateShift(index, 'allowSameDayWith', newAllowSameDayWith);
+                                }}
+                                className="h-4 w-4"
+                              />
+                              <span className="text-xs">
+                                {otherShift.label} ({otherShift.startTime}-{otherShift.endTime})
+                              </span>
+                            </label>
+                          );
+                        })}
+                        {localRules.shiftStartTimes.length === 1 && (
+                          <p className="text-xs text-gray-500 italic">
+                            Add another shift to enable same-day double shifts
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Select shifts that can be worked on the same calendar day (e.g., morning + evening)
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Shift Transition Rules */}
-        <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
-          <h3 className="text-sm font-semibold text-gray-700 mb-2">Shift Transition Rules</h3>
-          <p className="text-xs text-gray-600 mb-3">
-            Define which shifts can follow each other. Controls same-day double shifts and consecutive scheduling.
-          </p>
-          <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3 text-xs">
-            <strong>Quick Guide:</strong><br/>
-            • <strong>Same Day:</strong> Allow working both shifts on the same calendar day (e.g., morning + evening)<br/>
-            • <strong>Min Days Off:</strong> Required rest days between shifts (0 = no requirement)<br/>
-            • <strong>Max Consecutive:</strong> Maximum times this transition can repeat (0 = not allowed, 1+ = limit)
-          </div>
           
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-xs border border-gray-300">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="border border-gray-300 px-2 py-1 text-left">From Shift</th>
-                  <th className="border border-gray-300 px-2 py-1 text-left">To Shift</th>
-                  <th className="border border-gray-300 px-2 py-1 text-center">Same Day?</th>
-                  <th className="border border-gray-300 px-2 py-1 text-center">Min Days Off</th>
-                  <th className="border border-gray-300 px-2 py-1 text-center">Max Consecutive</th>
-                </tr>
-              </thead>
-              <tbody>
-                {localRules.shiftStartTimes.map((_, fromIndex) => (
-                  localRules.shiftStartTimes.map((__, toIndex) => {
-                    const rule = getTransitionRule(fromIndex, toIndex);
-                    return (
-                      <tr key={`${fromIndex}-${toIndex}`} className="hover:bg-purple-100">
-                        <td className="border border-gray-300 px-2 py-1 font-medium">
-                          {getShiftLabel(fromIndex)}
-                        </td>
-                        <td className="border border-gray-300 px-2 py-1 font-medium">
-                          {getShiftLabel(toIndex)}
-                        </td>
-                        <td className="border border-gray-300 px-2 py-1 text-center">
-                          <input
-                            type="checkbox"
-                            checked={rule.sameDay}
-                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'sameDay', e.target.checked)}
-                            className="h-4 w-4"
-                            title="Allow both shifts on the same day"
-                          />
-                        </td>
-                        <td className="border border-gray-300 px-2 py-1 text-center">
-                          <input
-                            type="number"
-                            value={rule.minDaysOff}
-                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'minDaysOff', parseInt(e.target.value) || 0)}
-                            className="w-16 px-1 py-1 border border-gray-300 rounded text-center"
-                            min="0"
-                            title="Minimum days off required between these shifts (0 = no requirement)"
-                          />
-                        </td>
-                        <td className="border border-gray-300 px-2 py-1 text-center">
-                          <input
-                            type="number"
-                            value={rule.maxConsecutive}
-                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'maxConsecutive', parseInt(e.target.value) || 0)}
-                            className="w-16 px-1 py-1 border border-gray-300 rounded text-center"
-                            min="0"
-                            title="Max consecutive transitions (0 = not allowed consecutive)"
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )).flat()}
-              </tbody>
-            </table>
+          {/* Add Shift button at bottom of list */}
+          <button
+            onClick={handleAddShift}
+            className="w-full mt-3 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2 px-4 rounded-md transition duration-200"
+          >
+            + Add Shift
+          </button>
+        </div>
+        </div>
+        
+        {/* Footer buttons - fixed at bottom */}
+        <div className="bg-white border-t border-gray-200 px-6 py-4 rounded-b-lg">
+          <div className="flex gap-3">
+            <button
+              onClick={handleCancel}
+              className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-4 rounded-md transition duration-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition duration-200"
+            >
+              Save & Regenerate
+            </button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
-            <strong>Same Day:</strong> Can work both shifts on the same calendar day<br/>
-            <strong>Min Days Off:</strong> Minimum full days off required between shifts (0 = no requirement)<br/>
-            <strong>Max Consecutive:</strong> Maximum consecutive transitions allowed (0 = not allowed, &gt;0 = limit)
-          </p>
-        </div>
-
-        <div className="flex gap-3 mt-4">
-          <button
-            onClick={handleCancel}
-            className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-4 rounded-md transition duration-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition duration-200"
-          >
-            Save & Regenerate
-          </button>
-        </div>
         </div>
       </div>
     </div>

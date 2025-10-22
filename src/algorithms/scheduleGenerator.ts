@@ -76,9 +76,9 @@ const getPreviousMonthShifts = (
 
   if (!prevSchedule) return [];
 
-  // Calculate maximum lookback needed based on all transition rules
+  // Calculate maximum lookback needed based on shift minDaysOff constraints
   const maxMinDaysOff = Math.max(
-    ...(prevSchedule.rules.shiftTransitionRules?.map(r => r.minDaysOff || 0) || [0]),
+    ...prevSchedule.rules.shiftStartTimes.map(s => s.minDaysOff),
     7 // Minimum 7 days lookback
   );
 
@@ -263,17 +263,23 @@ export const defaultRules: ScheduleRules = {
   targetHoursPerWeek: 36,
   shiftDurationHours: 12,
   shiftStartTimes: [
-    { label: 'Day Shift', startTime: '07:00', endTime: '19:00', requiredStaff: 3 },
-    { label: 'Night Shift', startTime: '19:00', endTime: '07:00', requiredStaff: 2 },
-  ],
-  shiftTransitionRules: [
-    // Default: Day Shift to Day Shift - up to 4 consecutive days allowed
-    { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 4 },
-    // Default: Day Shift to Night Shift - not allowed consecutively
-    { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 0 },
-    // Default: Night Shift to Day Shift - need 2 days rest after night, not allowed consecutively
-    { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
-    // Default: Night Shift to Night Shift - need 2 days rest between nights, not allowed consecutively
-    { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
+    { 
+      label: 'Day Shift', 
+      startTime: '07:00', 
+      endTime: '19:00', 
+      requiredStaff: 3,
+      minDaysOff: 0,          // No required rest after day shift
+      maxConsecutive: 4,       // Max 4 consecutive day shifts
+      allowSameDayWith: []     // Cannot work another shift same day
+    },
+    { 
+      label: 'Night Shift', 
+      startTime: '19:00', 
+      endTime: '07:00', 
+      requiredStaff: 2,
+      minDaysOff: 2,           // 2 days off required after night shift
+      maxConsecutive: 0,        // Cannot work consecutive night shifts
+      allowSameDayWith: []      // Cannot work another shift same day
+    },
   ],
 };

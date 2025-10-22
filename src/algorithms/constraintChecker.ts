@@ -8,6 +8,7 @@ export interface ConstraintCheckResult {
 
 /**
  * Check if a nurse can be assigned to a shift based on all constraints
+ * Uses the simplified per-shift constraint model
  */
 export const canAssignNurseToShift = (
   nurse: Nurse,
@@ -30,104 +31,87 @@ export const canAssignNurseToShift = (
     return { canAssign: false, reason: 'Already assigned to this shift' };
   }
 
+  const currentShiftIndex = shift.shiftIndex ?? 0;
+  const currentShiftConfig = rules.shiftStartTimes[currentShiftIndex];
+  
+  if (!currentShiftConfig) {
+    return { canAssign: false, reason: 'Invalid shift configuration' };
+  }
+
   // Check if already assigned to another shift on the same day
   const shiftOnSameDay = allShifts.find(
     s => isSameDayHelper(s.date, shift.date) && 
          s.id !== shift.id && 
          s.assignedNurses.includes(nurse.id)
   );
+  
   if (shiftOnSameDay) {
-    // Check if same-day double shift is allowed via transition rules
-    const fromIndex = shiftOnSameDay.shiftIndex;
-    const toIndex = shift.shiftIndex;
-    const transitionRule = rules.shiftTransitionRules?.find(
-      r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
-    );
+    const existingShiftIndex = shiftOnSameDay.shiftIndex ?? 0;
+    const existingShiftConfig = rules.shiftStartTimes[existingShiftIndex];
     
-    if (!transitionRule?.sameDay) {
+    // Check if the existing shift allows same-day work with the current shift
+    if (!existingShiftConfig?.allowSameDayWith.includes(currentShiftIndex)) {
       return { 
         canAssign: false, 
-        reason: `Same-day shifts not allowed: ${rules.shiftStartTimes[fromIndex]?.label || 'Shift ' + fromIndex} → ${rules.shiftStartTimes[toIndex]?.label || 'Shift ' + toIndex}` 
+        reason: `Same-day shifts not allowed: ${existingShiftConfig?.label || 'Shift ' + existingShiftIndex} → ${currentShiftConfig.label}` 
       };
     }
   }
 
-  // Check transition rules for previous day shifts
-  const previousDayDate = addDaysHelper(shift.date, -1);
-  const previousDayShifts = allShifts.filter(s => 
-    isSameDayHelper(s.date, previousDayDate) && 
-    s.assignedNurses.includes(nurse.id)
-  );
+  // Check minimum days off requirement after any shift type
+  for (let shiftIndex = 0; shiftIndex < rules.shiftStartTimes.length; shiftIndex++) {
+    const prevShiftConfig = rules.shiftStartTimes[shiftIndex];
+    const minDays = prevShiftConfig.minDaysOff;
 
-  for (const prevShift of previousDayShifts) {
-    const fromIndex = prevShift.shiftIndex ?? 0;
-    const toIndex = shift.shiftIndex ?? 0;
-    const transitionRule = rules.shiftTransitionRules?.find(
-      r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
-    );
-
-    // If maxConsecutive is 0, consecutive shifts are not allowed
-    if (transitionRule && transitionRule.maxConsecutive === 0) {
-      return {
-        canAssign: false,
-        reason: `Consecutive shifts not allowed: ${rules.shiftStartTimes[fromIndex]?.label || 'Shift ' + fromIndex} → ${rules.shiftStartTimes[toIndex]?.label || 'Shift ' + toIndex}`,
-      };
-    }
-  }
-
-  // Check minimum days off requirements for ALL shift transition rules
-  // This handles cases like: Night shift -> Day off -> Day off -> Day shift (with 2 day minimum)
-  const currentShiftIndex = shift.shiftIndex ?? 0;
-  
-  // Find all applicable transition rules TO the current shift
-  const applicableRules = rules.shiftTransitionRules?.filter(
-    r => r.toShiftIndex === currentShiftIndex && r.minDaysOff > 0
-  ) || [];
-
-  for (const rule of applicableRules) {
-    const fromShiftIndex = rule.fromShiftIndex;
-    const minDays = rule.minDaysOff;
-
-    // Look back through the minimum days off period
-    for (let i = 1; i <= minDays; i++) {
-      const checkDate = addDaysHelper(shift.date, -i);
-      const hadShift = allShifts.some(s => 
-        isSameDayHelper(s.date, checkDate) && 
-        s.assignedNurses.includes(nurse.id) &&
-        s.shiftIndex === fromShiftIndex
-      );
-      
-      if (hadShift) {
-        return {
-          canAssign: false,
-          reason: `Minimum ${minDays} day(s) off required after ${rules.shiftStartTimes[fromShiftIndex]?.label || 'Shift ' + fromShiftIndex} before ${rules.shiftStartTimes[currentShiftIndex]?.label || 'Shift ' + currentShiftIndex} (worked ${i} day(s) ago)`,
-        };
+    if (minDays > 0) {
+      // Look back through the minimum days off period
+      for (let i = 1; i <= minDays; i++) {
+        const checkDate = addDaysHelper(shift.date, -i);
+        const hadThisShiftType = allShifts.some(s => 
+          isSameDayHelper(s.date, checkDate) && 
+          s.assignedNurses.includes(nurse.id) &&
+          s.shiftIndex === shiftIndex
+        );
+        
+        if (hadThisShiftType) {
+          return {
+            canAssign: false,
+            reason: `Minimum ${minDays} day(s) off required after ${prevShiftConfig.label} (worked ${i} day(s) ago)`,
+          };
+        }
       }
     }
   }
 
-  // Check for consecutive shifts limit
-  // First check if there's a specific maxConsecutive for this shift type
-  const selfTransitionRule = rules.shiftTransitionRules?.find(
-    r => r.fromShiftIndex === currentShiftIndex && r.toShiftIndex === currentShiftIndex
-  );
-  
-  const maxConsecutiveForThisShift = selfTransitionRule?.maxConsecutive;
-  
-  // If maxConsecutive is > 0, enforce the limit
-  if (maxConsecutiveForThisShift !== undefined && maxConsecutiveForThisShift > 0) {
-    const consecutiveShifts = countConsecutiveShiftsEndingOn(
+  // Check for consecutive shifts of the same type
+  if (currentShiftConfig.maxConsecutive === 0) {
+    // Not allowed to work this shift type consecutively
+    const previousDayDate = addDaysHelper(shift.date, -1);
+    const hadSameShiftYesterday = allShifts.some(s =>
+      isSameDayHelper(s.date, previousDayDate) &&
+      s.assignedNurses.includes(nurse.id) &&
+      s.shiftIndex === currentShiftIndex
+    );
+
+    if (hadSameShiftYesterday) {
+      return {
+        canAssign: false,
+        reason: `Consecutive ${currentShiftConfig.label} shifts not allowed`,
+      };
+    }
+  } else if (currentShiftConfig.maxConsecutive > 0) {
+    // Check if we've reached the consecutive limit
+    const consecutiveCount = countConsecutiveShiftsEndingOn(
       addDaysHelper(shift.date, -1),
       nurse.id,
       allShifts,
       currentShiftIndex
     );
 
-    if (consecutiveShifts >= maxConsecutiveForThisShift) {
-      const shiftLabel = rules.shiftStartTimes[currentShiftIndex]?.label || 'Shift ' + currentShiftIndex;
+    if (consecutiveCount >= currentShiftConfig.maxConsecutive) {
       return {
         canAssign: false,
-        reason: `Maximum ${maxConsecutiveForThisShift} consecutive ${shiftLabel} shifts reached`,
+        reason: `Maximum ${currentShiftConfig.maxConsecutive} consecutive ${currentShiftConfig.label} shifts reached`,
       };
     }
   }

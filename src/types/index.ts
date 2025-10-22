@@ -23,21 +23,18 @@ export interface Shift {
 }
 
 export interface ShiftTime {
-  label: string; // Full label (e.g., "Morning", "Afternoon", "Night", "On-call")
-  abbreviation?: string; // Short label for calendar (e.g., "M", "A", "N") - defaults to first letter of label
-  startTime: string; // e.g., "07:00"
-  endTime: string; // e.g., "19:00"
-  requiredStaff: number; // How many people needed for this shift
-  dayAfterLabel?: string; // Optional label to show on the day AFTER this shift (e.g., "R" for recovery after night shift)
-  activeDaysOfWeek?: boolean[]; // [Sun, Mon, Tue, Wed, Thu, Fri, Sat] - if not specified, uses global activeDaysOfWeek
-}
-
-export interface ShiftTransitionRule {
-  fromShiftIndex: number;
-  toShiftIndex: number;
-  sameDay: boolean; // Can work both shifts on the same calendar day
-  minDaysOff: number; // Minimum days off required between these shifts (0 = no requirement)
-  maxConsecutive: number; // Max consecutive transitions (0 = not allowed, >0 = limit)
+  label: string;
+  abbreviation?: string;
+  startTime: string; // HH:mm format
+  endTime: string; // HH:mm format
+  requiredStaff: number;
+  dayAfterLabel?: string; // Optional label for day after shift (e.g., "R" for recovery)
+  activeDaysOfWeek?: boolean[]; // Optional per-shift active days (falls back to global if undefined)
+  
+  // Simplified constraint model - all required
+  minDaysOff: number; // Days off required AFTER working this shift (0 = no requirement)
+  maxConsecutive: number; // Max times can work this shift consecutively (0 = not allowed consecutive)
+  allowSameDayWith: number[]; // Array of shift indices that can be worked on same day (empty = no same-day combinations)
 }
 
 export interface ScheduleRules {
@@ -45,7 +42,6 @@ export interface ScheduleRules {
   targetHoursPerWeek: number; // default: 36
   shiftDurationHours: number; // default: 12
   shiftStartTimes: ShiftTime[]; // Array of shift times
-  shiftTransitionRules: ShiftTransitionRule[]; // Rules for shift transitions
 }
 
 export interface Schedule {

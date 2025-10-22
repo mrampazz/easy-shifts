@@ -88,14 +88,27 @@ export const mockShiftConfigurations = {
     targetHoursPerWeek: 36,
     shiftDurationHours: 12,
     shiftStartTimes: [
-      { label: 'Day Shift', abbreviation: 'D', startTime: '07:00', endTime: '19:00', requiredStaff: 3 },
-      { label: 'Night Shift', abbreviation: 'N', startTime: '19:00', endTime: '07:00', requiredStaff: 2, dayAfterLabel: '->' },
-    ],
-    shiftTransitionRules: [
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 2 }, // Day to Day: up to 2 consecutive
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 0 }, // Day to Night: not allowed consecutive
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 }, // Night to Day: 2 days off required, not consecutive
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 }, // Night to Night: 2 days off required, not consecutive
+      { 
+        label: 'Day Shift', 
+        abbreviation: 'D', 
+        startTime: '07:00', 
+        endTime: '19:00', 
+        requiredStaff: 3,
+        minDaysOff: 0,          // No required rest after day shift
+        maxConsecutive: 2,       // Max 2 consecutive day shifts
+        allowSameDayWith: []     // Cannot work another shift same day
+      },
+      { 
+        label: 'Night Shift', 
+        abbreviation: 'N', 
+        startTime: '19:00', 
+        endTime: '07:00', 
+        requiredStaff: 2,
+        dayAfterLabel: '->',
+        minDaysOff: 2,           // 2 days off required after night shift
+        maxConsecutive: 0,        // Cannot work consecutive night shifts
+        allowSameDayWith: []      // Cannot work another shift same day
+      },
     ],
   } as ScheduleRules,
 
@@ -105,29 +118,33 @@ export const mockShiftConfigurations = {
     targetHoursPerWeek: 40,
     shiftDurationHours: 8,
     shiftStartTimes: [
-      { label: 'Morning', startTime: '06:00', endTime: '14:00', requiredStaff: 2 },
-      { label: 'Afternoon', startTime: '14:00', endTime: '22:00', requiredStaff: 2 },
-      { label: 'Night', startTime: '22:00', endTime: '06:00', requiredStaff: 2 },
-    ],
-    shiftTransitionRules: [
-      // Morning to Morning
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
-      // Morning to Afternoon
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 1 },
-      // Morning to Night
-      { fromShiftIndex: 0, toShiftIndex: 2, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
-      // Afternoon to Morning
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
-      // Afternoon to Afternoon
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
-      // Afternoon to Night
-      { fromShiftIndex: 1, toShiftIndex: 2, sameDay: false, minDaysOff: 0, maxConsecutive: 1 },
-      // Night to Morning
-      { fromShiftIndex: 2, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
-      // Night to Afternoon
-      { fromShiftIndex: 2, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
-      // Night to Night
-      { fromShiftIndex: 2, toShiftIndex: 2, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
+      { 
+        label: 'Morning', 
+        startTime: '06:00', 
+        endTime: '14:00', 
+        requiredStaff: 2,
+        minDaysOff: 0,           // No required rest after morning
+        maxConsecutive: 5,        // Max 5 consecutive mornings
+        allowSameDayWith: [1]     // Can work afternoon same day
+      },
+      { 
+        label: 'Afternoon', 
+        startTime: '14:00', 
+        endTime: '22:00', 
+        requiredStaff: 2,
+        minDaysOff: 0,            // No required rest after afternoon
+        maxConsecutive: 5,         // Max 5 consecutive afternoons
+        allowSameDayWith: [2]      // Can work night same day
+      },
+      { 
+        label: 'Night', 
+        startTime: '22:00', 
+        endTime: '06:00', 
+        requiredStaff: 2,
+        minDaysOff: 2,             // 2 days off required after night
+        maxConsecutive: 0,          // Cannot work consecutive nights
+        allowSameDayWith: []        // Cannot work another shift same day
+      },
     ],
   } as ScheduleRules,
 
@@ -137,18 +154,24 @@ export const mockShiftConfigurations = {
     targetHoursPerWeek: 40,
     shiftDurationHours: 8,
     shiftStartTimes: [
-      { label: 'Day Shift', startTime: '09:00', endTime: '17:00', requiredStaff: 3 },
-      { label: 'Night Shift', startTime: '17:00', endTime: '01:00', requiredStaff: 1 },
-    ],
-    shiftTransitionRules: [
-      // Day to Day
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
-      // Day to Night - can work same day (double shift)
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: true, minDaysOff: 0, maxConsecutive: 2 },
-      // Night to Day
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
-      // Night to Night
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
+      { 
+        label: 'Day Shift', 
+        startTime: '09:00', 
+        endTime: '17:00', 
+        requiredStaff: 3,
+        minDaysOff: 0,            // No required rest after day shift
+        maxConsecutive: 5,         // Max 5 consecutive days
+        allowSameDayWith: [1]      // Can work night shift same day (double)
+      },
+      { 
+        label: 'Night Shift', 
+        startTime: '17:00', 
+        endTime: '01:00', 
+        requiredStaff: 1,
+        minDaysOff: 1,             // 1 day off required after night
+        maxConsecutive: 5,          // Max 5 consecutive nights
+        allowSameDayWith: []        // Cannot work another shift same day
+      },
     ],
   } as ScheduleRules,
 
@@ -158,18 +181,24 @@ export const mockShiftConfigurations = {
     targetHoursPerWeek: 40,
     shiftDurationHours: 8,
     shiftStartTimes: [
-      { label: 'Morning', startTime: '07:00', endTime: '15:00', requiredStaff: 2 },
-      { label: 'Evening', startTime: '15:00', endTime: '23:00', requiredStaff: 2 },
-    ],
-    shiftTransitionRules: [
-      // Morning to Morning
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 3 },
-      // Morning to Evening - Allow doubles
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: true, minDaysOff: 0, maxConsecutive: 2 },
-      // Evening to Morning - not allowed consecutive
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 0 },
-      // Evening to Evening
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 3 },
+      { 
+        label: 'Morning', 
+        startTime: '07:00', 
+        endTime: '15:00', 
+        requiredStaff: 2,
+        minDaysOff: 0,             // No required rest after morning
+        maxConsecutive: 3,          // Max 3 consecutive mornings
+        allowSameDayWith: [1]       // Can work evening same day (double shift)
+      },
+      { 
+        label: 'Evening', 
+        startTime: '15:00', 
+        endTime: '23:00', 
+        requiredStaff: 2,
+        minDaysOff: 0,              // No required rest after evening
+        maxConsecutive: 3,           // Max 3 consecutive evenings
+        allowSameDayWith: []         // Cannot work another shift same day
+      },
     ],
   } as ScheduleRules,
 };
