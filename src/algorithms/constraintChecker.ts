@@ -66,8 +66,8 @@ export const canAssignNurseToShift = (
       r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
     );
 
-    // If there's a transition rule defined, check if consecutive is allowed
-    if (transitionRule && !transitionRule.consecutive) {
+    // If maxConsecutive is 0, consecutive shifts are not allowed
+    if (transitionRule && transitionRule.maxConsecutive === 0) {
       return {
         canAssign: false,
         reason: `Consecutive shifts not allowed: ${rules.shiftStartTimes[fromIndex]?.label || 'Shift ' + fromIndex} → ${rules.shiftStartTimes[toIndex]?.label || 'Shift ' + toIndex}`,
@@ -81,12 +81,12 @@ export const canAssignNurseToShift = (
   
   // Find all applicable transition rules TO the current shift
   const applicableRules = rules.shiftTransitionRules?.filter(
-    r => r.toShiftIndex === currentShiftIndex && r.minDaysOff && r.minDaysOff > 0
+    r => r.toShiftIndex === currentShiftIndex && r.minDaysOff > 0
   ) || [];
 
   for (const rule of applicableRules) {
     const fromShiftIndex = rule.fromShiftIndex;
-    const minDays = rule.minDaysOff!;
+    const minDays = rule.minDaysOff;
 
     // Look back through the minimum days off period
     for (let i = 1; i <= minDays; i++) {
@@ -112,21 +112,24 @@ export const canAssignNurseToShift = (
     r => r.fromShiftIndex === currentShiftIndex && r.toShiftIndex === currentShiftIndex
   );
   
-  const maxConsecutiveForThisShift = selfTransitionRule?.maxConsecutive ?? rules.maxConsecutiveShifts;
+  const maxConsecutiveForThisShift = selfTransitionRule?.maxConsecutive;
   
-  const consecutiveShifts = countConsecutiveShiftsEndingOn(
-    addDaysHelper(shift.date, -1),
-    nurse.id,
-    allShifts,
-    currentShiftIndex
-  );
+  // If maxConsecutive is > 0, enforce the limit
+  if (maxConsecutiveForThisShift !== undefined && maxConsecutiveForThisShift > 0) {
+    const consecutiveShifts = countConsecutiveShiftsEndingOn(
+      addDaysHelper(shift.date, -1),
+      nurse.id,
+      allShifts,
+      currentShiftIndex
+    );
 
-  if (consecutiveShifts >= maxConsecutiveForThisShift) {
-    const shiftLabel = rules.shiftStartTimes[currentShiftIndex]?.label || 'Shift ' + currentShiftIndex;
-    return {
-      canAssign: false,
-      reason: `Maximum ${maxConsecutiveForThisShift} consecutive ${shiftLabel} shifts reached`,
-    };
+    if (consecutiveShifts >= maxConsecutiveForThisShift) {
+      const shiftLabel = rules.shiftStartTimes[currentShiftIndex]?.label || 'Shift ' + currentShiftIndex;
+      return {
+        canAssign: false,
+        reason: `Maximum ${maxConsecutiveForThisShift} consecutive ${shiftLabel} shifts reached`,
+      };
+    }
   }
 
   return { canAssign: true };

@@ -29,15 +29,15 @@ export interface ShiftTime {
   endTime: string; // e.g., "19:00"
   requiredStaff: number; // How many people needed for this shift
   dayAfterLabel?: string; // Optional label to show on the day AFTER this shift (e.g., "R" for recovery after night shift)
+  activeDaysOfWeek?: boolean[]; // [Sun, Mon, Tue, Wed, Thu, Fri, Sat] - if not specified, uses global activeDaysOfWeek
 }
 
 export interface ShiftTransitionRule {
-  fromShiftIndex: number; // Index in shiftStartTimes array
-  toShiftIndex: number; // Index in shiftStartTimes array
-  sameDay: boolean; // Can they work both shifts on the same day?
-  consecutive: boolean; // Can toShift start immediately after fromShift ends?
-  minDaysOff?: number; // Minimum days off required between these shifts
-  maxConsecutive?: number; // Maximum consecutive shifts of this type (overrides global maxConsecutiveShifts for this specific transition)
+  fromShiftIndex: number;
+  toShiftIndex: number;
+  sameDay: boolean; // Can work both shifts on the same calendar day
+  minDaysOff: number; // Minimum days off required between these shifts (0 = no requirement)
+  maxConsecutive: number; // Max consecutive transitions (0 = not allowed, >0 = limit)
 }
 
 export interface ScheduleRules {
@@ -46,7 +46,6 @@ export interface ScheduleRules {
   shiftDurationHours: number; // default: 12
   shiftStartTimes: ShiftTime[]; // Array of shift times
   shiftTransitionRules: ShiftTransitionRule[]; // Rules for shift transitions
-  maxConsecutiveShifts: number; // default: 4
 }
 
 export interface Schedule {

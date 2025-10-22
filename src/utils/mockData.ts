@@ -92,12 +92,11 @@ export const mockShiftConfigurations = {
       { label: 'Night Shift', abbreviation: 'N', startTime: '19:00', endTime: '07:00', requiredStaff: 2, dayAfterLabel: '->' },
     ],
     shiftTransitionRules: [
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, consecutive: true, maxConsecutive: 2 },
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, consecutive: false },
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, consecutive: false, minDaysOff: 2 },
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, consecutive: false, minDaysOff: 2 },
+      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 2 }, // Day to Day: up to 2 consecutive
+      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 0 }, // Day to Night: not allowed consecutive
+      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 }, // Night to Day: 2 days off required, not consecutive
+      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 }, // Night to Night: 2 days off required, not consecutive
     ],
-    maxConsecutiveShifts: 4,
   } as ScheduleRules,
 
   // Three-shift rotation (morning, afternoon, night)
@@ -112,65 +111,66 @@ export const mockShiftConfigurations = {
     ],
     shiftTransitionRules: [
       // Morning to Morning
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, consecutive: true },
+      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
       // Morning to Afternoon
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, consecutive: true },
+      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 1 },
       // Morning to Night
-      { fromShiftIndex: 0, toShiftIndex: 2, sameDay: false, consecutive: false, minDaysOff: 1 },
+      { fromShiftIndex: 0, toShiftIndex: 2, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
       // Afternoon to Morning
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, consecutive: false, minDaysOff: 1 },
+      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
       // Afternoon to Afternoon
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, consecutive: true },
+      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
       // Afternoon to Night
-      { fromShiftIndex: 1, toShiftIndex: 2, sameDay: false, consecutive: true },
+      { fromShiftIndex: 1, toShiftIndex: 2, sameDay: false, minDaysOff: 0, maxConsecutive: 1 },
       // Night to Morning
-      { fromShiftIndex: 2, toShiftIndex: 0, sameDay: false, consecutive: false, minDaysOff: 2 },
+      { fromShiftIndex: 2, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
       // Night to Afternoon
-      { fromShiftIndex: 2, toShiftIndex: 1, sameDay: false, consecutive: false, minDaysOff: 2 },
+      { fromShiftIndex: 2, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
       // Night to Night
-      { fromShiftIndex: 2, toShiftIndex: 2, sameDay: false, consecutive: false, minDaysOff: 2 },
+      { fromShiftIndex: 2, toShiftIndex: 2, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
     ],
-    maxConsecutiveShifts: 5,
   } as ScheduleRules,
 
-  // Weekday only (Monday-Friday)
+    // Weekday only shifts
   weekday_only: {
-    activeDaysOfWeek: [false, true, true, true, true, true, false], // Mon-Fri only
+    activeDaysOfWeek: [true, true, true, true, true, false, false],
     targetHoursPerWeek: 40,
-    shiftDurationHours: 10,
+    shiftDurationHours: 8,
     shiftStartTimes: [
-      { label: 'Day', startTime: '08:00', endTime: '18:00', requiredStaff: 3 },
-      { label: 'Night', startTime: '18:00', endTime: '04:00', requiredStaff: 2 },
+      { label: 'Day Shift', startTime: '09:00', endTime: '17:00', requiredStaff: 3 },
+      { label: 'Night Shift', startTime: '17:00', endTime: '01:00', requiredStaff: 1 },
     ],
     shiftTransitionRules: [
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, consecutive: true },
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, consecutive: false },
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, consecutive: false, minDaysOff: 1 },
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, consecutive: false, minDaysOff: 1 },
+      // Day to Day
+      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
+      // Day to Night - can work same day (double shift)
+      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: true, minDaysOff: 0, maxConsecutive: 2 },
+      // Night to Day
+      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 1, maxConsecutive: 0 },
+      // Night to Night
+      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 5 },
     ],
-    maxConsecutiveShifts: 5,
   } as ScheduleRules,
 
-  // Flexible retail/restaurant (allowing doubles)
+  // Flexible doubles (can work two shifts in one day)
   flexible_doubles: {
     activeDaysOfWeek: [true, true, true, true, true, true, true],
-    targetHoursPerWeek: 35,
-    shiftDurationHours: 6,
+    targetHoursPerWeek: 40,
+    shiftDurationHours: 8,
     shiftStartTimes: [
-      { label: 'Opening', startTime: '09:00', endTime: '15:00', requiredStaff: 2 },
-      { label: 'Closing', startTime: '15:00', endTime: '21:00', requiredStaff: 2 },
+      { label: 'Morning', startTime: '07:00', endTime: '15:00', requiredStaff: 2 },
+      { label: 'Evening', startTime: '15:00', endTime: '23:00', requiredStaff: 2 },
     ],
     shiftTransitionRules: [
-      // Opening to Opening
-      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, consecutive: true },
-      // Opening to Closing (same day double allowed)
-      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: true, consecutive: true },
-      // Closing to Opening (next day allowed)
-      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, consecutive: true },
-      // Closing to Closing
-      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, consecutive: true },
+      // Morning to Morning
+      { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 3 },
+      // Morning to Evening - Allow doubles
+      { fromShiftIndex: 0, toShiftIndex: 1, sameDay: true, minDaysOff: 0, maxConsecutive: 2 },
+      // Evening to Morning - not allowed consecutive
+      { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 0 },
+      // Evening to Evening
+      { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 3 },
     ],
-    maxConsecutiveShifts: 6,
   } as ScheduleRules,
 };
 

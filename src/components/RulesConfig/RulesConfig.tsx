@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { ScheduleRules, ShiftTime, ShiftTransitionRule } from '../../types';
 import { useSchedule } from '../../hooks/useSchedule';
 
@@ -9,42 +9,68 @@ interface RulesConfigProps {
 
 export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => {
   const { rules, setRules, regenerateSchedule } = useSchedule();
+  const [localRules, setLocalRules] = useState(rules);
   const [jsonInput, setJsonInput] = useState('');
   const [showJsonImport, setShowJsonImport] = useState(false);
   const [jsonError, setJsonError] = useState('');
 
-  if (!isOpen) return null;
+  // Sync local rules when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setLocalRules(rules);
+    }
+  }, [isOpen, rules]);
 
-  const handleChange = (key: keyof ScheduleRules, value: number | boolean | boolean[] | ShiftTime[] | ShiftTransitionRule[]) => {
-    setRules({ ...rules, [key]: value });
-  };
+  const handleChange = useCallback((key: keyof ScheduleRules, value: number | boolean | boolean[] | ShiftTime[] | ShiftTransitionRule[]) => {
+    setLocalRules(prev => ({ ...prev, [key]: value }));
+  }, []);
 
-  const handleAddShift = () => {
+  const handleSave = useCallback(() => {
+    setRules(localRules);
+    regenerateSchedule();
+    onClose();
+  }, [localRules, setRules, regenerateSchedule, onClose]);
+
+  const handleCancel = useCallback(() => {
+    setLocalRules(rules);
+    onClose();
+  }, [rules, onClose]);
+
+  const handleAddShift = useCallback(() => {
     const newShift: ShiftTime = {
       label: 'New Shift',
       startTime: '08:00',
       endTime: '20:00',
       requiredStaff: 2,
     };
-    handleChange('shiftStartTimes', [...rules.shiftStartTimes, newShift]);
-  };
+    handleChange('shiftStartTimes', [...localRules.shiftStartTimes, newShift]);
+  }, [localRules.shiftStartTimes, handleChange]);
 
-  const handleUpdateShift = (index: number, field: keyof ShiftTime, value: string) => {
-    const updatedShifts = [...rules.shiftStartTimes];
-    updatedShifts[index] = { ...updatedShifts[index], [field]: value };
+  const handleUpdateShift = useCallback((index: number, field: keyof ShiftTime, value: string | number | boolean[] | undefined) => {
+    const updatedShifts = [...localRules.shiftStartTimes];
+    
+    if (value === undefined) {
+      // Remove the field
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [field]: _, ...rest} = updatedShifts[index];
+      updatedShifts[index] = rest as ShiftTime;
+    } else {
+      updatedShifts[index] = { ...updatedShifts[index], [field]: value };
+    }
+    
     handleChange('shiftStartTimes', updatedShifts);
-  };
+  }, [localRules.shiftStartTimes, handleChange]);
 
-  const handleDeleteShift = (index: number) => {
-    if (rules.shiftStartTimes.length <= 1) {
+  const handleDeleteShift = useCallback((index: number) => {
+    if (localRules.shiftStartTimes.length <= 1) {
       alert('You must have at least one shift type!');
       return;
     }
-    const updatedShifts = rules.shiftStartTimes.filter((_, i) => i !== index);
+    const updatedShifts = localRules.shiftStartTimes.filter((_, i) => i !== index);
     handleChange('shiftStartTimes', updatedShifts);
     
     // Remove any transition rules involving this shift
-    const updatedRules = (rules.shiftTransitionRules || []).filter(
+    const updatedRules = (localRules.shiftTransitionRules || []).filter(
       rule => rule.fromShiftIndex !== index && rule.toShiftIndex !== index
     ).map(rule => ({
       ...rule,
@@ -52,10 +78,10 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
       toShiftIndex: rule.toShiftIndex > index ? rule.toShiftIndex - 1 : rule.toShiftIndex,
     }));
     handleChange('shiftTransitionRules', updatedRules);
-  };
+  }, [localRules.shiftStartTimes, localRules.shiftTransitionRules, handleChange]);
 
-  const handleUpdateTransitionRule = (fromIndex: number, toIndex: number, field: keyof ShiftTransitionRule, value: boolean | number | undefined) => {
-    const currentRules = rules.shiftTransitionRules || [];
+  const handleUpdateTransitionRule = useCallback((fromIndex: number, toIndex: number, field: keyof ShiftTransitionRule, value: boolean | number | undefined) => {
+    const currentRules = localRules.shiftTransitionRules || [];
     const ruleIndex = currentRules.findIndex(
       r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
     );
@@ -77,40 +103,39 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
         fromShiftIndex: fromIndex,
         toShiftIndex: toIndex,
         sameDay: field === 'sameDay' ? value as boolean : false,
-        consecutive: field === 'consecutive' ? value as boolean : false,
-        ...(field === 'minDaysOff' && typeof value === 'number' && { minDaysOff: value }),
-        ...(field === 'maxConsecutive' && typeof value === 'number' && { maxConsecutive: value }),
+        minDaysOff: field === 'minDaysOff' ? value as number : 0,
+        maxConsecutive: field === 'maxConsecutive' ? value as number : 0,
       };
       handleChange('shiftTransitionRules', [...currentRules, newRule]);
     }
-  };
+  }, [localRules.shiftTransitionRules, handleChange]);
 
-  const getTransitionRule = (fromIndex: number, toIndex: number): ShiftTransitionRule => {
-    const rule = (rules.shiftTransitionRules || []).find(
+  const getTransitionRule = useCallback((fromIndex: number, toIndex: number): ShiftTransitionRule => {
+    const rule = (localRules.shiftTransitionRules || []).find(
       r => r.fromShiftIndex === fromIndex && r.toShiftIndex === toIndex
     );
-    return rule || { fromShiftIndex: fromIndex, toShiftIndex: toIndex, sameDay: false, consecutive: false };
-  };
+    return rule || { fromShiftIndex: fromIndex, toShiftIndex: toIndex, sameDay: false, minDaysOff: 0, maxConsecutive: 0 };
+  }, [localRules.shiftTransitionRules]);
 
-  const getShiftLabel = (index: number) => {
-    const shift = rules.shiftStartTimes[index];
+  const getShiftLabel = useCallback((index: number) => {
+    const shift = localRules.shiftStartTimes[index];
     return `${shift.label} (${shift.startTime}-${shift.endTime})`;
-  };
+  }, [localRules.shiftStartTimes]);
 
-  const handleExportJson = () => {
-    const json = JSON.stringify(rules, null, 2);
+  const handleExportJson = useCallback(() => {
+    const json = JSON.stringify(localRules, null, 2);
     navigator.clipboard.writeText(json);
     alert('Rules copied to clipboard!');
-  };
+  }, [localRules]);
 
-  const handleImportJson = () => {
+  const handleImportJson = useCallback(() => {
     try {
       const imported = JSON.parse(jsonInput);
       // Convert activeDaysOfWeek if it's an object
       if (imported.activeDaysOfWeek && !Array.isArray(imported.activeDaysOfWeek)) {
         imported.activeDaysOfWeek = Object.values(imported.activeDaysOfWeek);
       }
-      setRules(imported as ScheduleRules);
+      setLocalRules(imported as ScheduleRules);
       setJsonError('');
       setShowJsonImport(false);
       setJsonInput('');
@@ -118,27 +143,23 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
     } catch {
       setJsonError('Invalid JSON format');
     }
-  };
+  }, [jsonInput]);
 
-  const handleDayToggle = (dayIndex: number) => {
-    const newDays = [...rules.activeDaysOfWeek];
+  const handleDayToggle = useCallback((dayIndex: number) => {
+    const newDays = [...localRules.activeDaysOfWeek];
     newDays[dayIndex] = !newDays[dayIndex];
     handleChange('activeDaysOfWeek', newDays);
-  };
+  }, [localRules.activeDaysOfWeek, handleChange]);
 
-  const handleRegenerate = () => {
-    // Force regenerate by clearing history manually
-    regenerateSchedule();
-    onClose();
-  };
+  const handleBackdropClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      handleCancel();
+    }
+  }, [handleCancel]);
 
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
+  if (!isOpen) return null;
 
   return (
     <div 
@@ -207,7 +228,7 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
                 key={day}
                 onClick={() => handleDayToggle(index)}
                 className={`px-2 py-2 text-xs font-semibold rounded-md transition ${
-                  rules.activeDaysOfWeek[index]
+                  localRules.activeDaysOfWeek[index]
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-200 text-gray-500'
                 }`}
@@ -225,7 +246,7 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
             </label>
             <input
               type="number"
-              value={rules.targetHoursPerWeek}
+              value={localRules.targetHoursPerWeek}
               onChange={(e) => handleChange('targetHoursPerWeek', parseInt(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               min="1"
@@ -238,21 +259,8 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
             </label>
             <input
               type="number"
-              value={rules.shiftDurationHours}
+              value={localRules.shiftDurationHours}
               onChange={(e) => handleChange('shiftDurationHours', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              min="1"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Max Consecutive Shifts
-            </label>
-            <input
-              type="number"
-              value={rules.maxConsecutiveShifts}
-              onChange={(e) => handleChange('maxConsecutiveShifts', parseInt(e.target.value))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               min="1"
             />
@@ -272,7 +280,7 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
           </div>
           
           <div className="space-y-3">
-            {rules.shiftStartTimes.map((shiftTime, index) => (
+            {localRules.shiftStartTimes.map((shiftTime, index) => (
               <div key={index} className="bg-gray-50 p-4 rounded-md border border-gray-300 relative">
                 {/* Delete button in top right */}
                 <button
@@ -371,6 +379,67 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
                       Useful for marking mandatory recovery days after night shifts
                     </p>
                   </div>
+
+                  {/* Active Days for this Shift */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Active Days (optional - leave unchecked to use global)
+                    </label>
+                    <div className="flex gap-1 flex-wrap">
+                      {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day, dayIndex) => {
+                        const isActive = shiftTime.activeDaysOfWeek?.[dayIndex] ?? null;
+                        const globalActive = localRules.activeDaysOfWeek[dayIndex];
+                        return (
+                          <button
+                            key={dayIndex}
+                            type="button"
+                            onClick={() => {
+                              const currentDays = shiftTime.activeDaysOfWeek || null;
+                              let newDays: boolean[] | undefined;
+                              
+                              if (currentDays === null) {
+                                // First click: copy global and toggle this day
+                                newDays = [...localRules.activeDaysOfWeek];
+                                newDays[dayIndex] = !globalActive;
+                              } else {
+                                // Subsequent clicks: toggle this day
+                                newDays = [...currentDays];
+                                newDays[dayIndex] = !newDays[dayIndex];
+                                
+                                // If all days match global, set back to undefined
+                                if (newDays.every((val, i) => val === localRules.activeDaysOfWeek[i])) {
+                                  newDays = undefined;
+                                }
+                              }
+                              
+                              handleUpdateShift(index, 'activeDaysOfWeek', newDays);
+                            }}
+                            className={`px-2 py-1.5 text-xs font-semibold rounded transition ${
+                              isActive === null
+                                ? globalActive
+                                  ? 'bg-gray-300 text-gray-700 border-2 border-dashed border-gray-400'
+                                  : 'bg-gray-100 text-gray-400 border-2 border-dashed border-gray-300'
+                                : isActive
+                                ? 'bg-green-600 text-white'
+                                : 'bg-gray-200 text-gray-500'
+                            }`}
+                            title={
+                              isActive === null
+                                ? `Using global setting (${globalActive ? 'active' : 'inactive'})`
+                                : isActive
+                                ? 'Active for this shift'
+                                : 'Inactive for this shift'
+                            }
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Dashed border = using global days. Solid = shift-specific override.
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}
@@ -379,10 +448,16 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
 
         {/* Shift Transition Rules */}
         <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Shift Transition Rules</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">Shift Transition Rules</h3>
           <p className="text-xs text-gray-600 mb-3">
             Define which shifts can follow each other. Controls same-day double shifts and consecutive scheduling.
           </p>
+          <div className="bg-blue-50 border border-blue-200 rounded p-3 mb-3 text-xs">
+            <strong>Quick Guide:</strong><br/>
+            • <strong>Same Day:</strong> Allow working both shifts on the same calendar day (e.g., morning + evening)<br/>
+            • <strong>Min Days Off:</strong> Required rest days between shifts (0 = no requirement)<br/>
+            • <strong>Max Consecutive:</strong> Maximum times this transition can repeat (0 = not allowed, 1+ = limit)
+          </div>
           
           <div className="overflow-x-auto">
             <table className="min-w-full text-xs border border-gray-300">
@@ -391,16 +466,14 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
                   <th className="border border-gray-300 px-2 py-1 text-left">From Shift</th>
                   <th className="border border-gray-300 px-2 py-1 text-left">To Shift</th>
                   <th className="border border-gray-300 px-2 py-1 text-center">Same Day?</th>
-                  <th className="border border-gray-300 px-2 py-1 text-center">Consecutive?</th>
                   <th className="border border-gray-300 px-2 py-1 text-center">Min Days Off</th>
                   <th className="border border-gray-300 px-2 py-1 text-center">Max Consecutive</th>
                 </tr>
               </thead>
               <tbody>
-                {rules.shiftStartTimes.map((_, fromIndex) => (
-                  rules.shiftStartTimes.map((__, toIndex) => {
+                {localRules.shiftStartTimes.map((_, fromIndex) => (
+                  localRules.shiftStartTimes.map((__, toIndex) => {
                     const rule = getTransitionRule(fromIndex, toIndex);
-                    const isSelfTransition = fromIndex === toIndex;
                     return (
                       <tr key={`${fromIndex}-${toIndex}`} className="hover:bg-purple-100">
                         <td className="border border-gray-300 px-2 py-1 font-medium">
@@ -420,37 +493,23 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
                         </td>
                         <td className="border border-gray-300 px-2 py-1 text-center">
                           <input
-                            type="checkbox"
-                            checked={rule.consecutive}
-                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'consecutive', e.target.checked)}
-                            className="h-4 w-4"
-                            title="Allow back-to-back shifts (to shift starts immediately after from shift ends)"
+                            type="number"
+                            value={rule.minDaysOff}
+                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'minDaysOff', parseInt(e.target.value) || 0)}
+                            className="w-16 px-1 py-1 border border-gray-300 rounded text-center"
+                            min="0"
+                            title="Minimum days off required between these shifts (0 = no requirement)"
                           />
                         </td>
                         <td className="border border-gray-300 px-2 py-1 text-center">
                           <input
                             type="number"
-                            value={rule.minDaysOff || 0}
-                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'minDaysOff', parseInt(e.target.value))}
+                            value={rule.maxConsecutive}
+                            onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'maxConsecutive', parseInt(e.target.value) || 0)}
                             className="w-16 px-1 py-1 border border-gray-300 rounded text-center"
                             min="0"
-                            title="Minimum days off required between these shifts"
+                            title="Max consecutive transitions (0 = not allowed consecutive)"
                           />
-                        </td>
-                        <td className="border border-gray-300 px-2 py-1 text-center">
-                          {isSelfTransition ? (
-                            <input
-                              type="number"
-                              value={rule.maxConsecutive || ''}
-                              onChange={(e) => handleUpdateTransitionRule(fromIndex, toIndex, 'maxConsecutive', e.target.value ? parseInt(e.target.value) : undefined)}
-                              className="w-16 px-1 py-1 border border-gray-300 rounded text-center"
-                              min="1"
-                              placeholder="Global"
-                              title={`Max consecutive ${getShiftLabel(toIndex)} shifts (leave empty to use global max: ${rules.maxConsecutiveShifts})`}
-                            />
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
                         </td>
                       </tr>
                     );
@@ -461,17 +520,25 @@ export const RulesConfig: React.FC<RulesConfigProps> = ({ isOpen, onClose }) => 
           </div>
           <p className="text-xs text-gray-500 mt-2">
             <strong>Same Day:</strong> Can work both shifts on the same calendar day<br/>
-            <strong>Consecutive:</strong> Can start second shift immediately after first ends<br/>
-            <strong>Min Days Off:</strong> Minimum full days off required between shifts (0 = no requirement)
+            <strong>Min Days Off:</strong> Minimum full days off required between shifts (0 = no requirement)<br/>
+            <strong>Max Consecutive:</strong> Maximum consecutive transitions allowed (0 = not allowed, &gt;0 = limit)
           </p>
         </div>
 
-        <button
-          onClick={handleRegenerate}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition duration-200"
-        >
-          Regenerate Schedule
-        </button>
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={handleCancel}
+            className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-semibold py-3 px-4 rounded-md transition duration-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-md transition duration-200"
+          >
+            Save & Regenerate
+          </button>
+        </div>
         </div>
       </div>
     </div>

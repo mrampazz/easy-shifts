@@ -22,13 +22,15 @@ export const generateSchedule = (
   monthDays.forEach((day, dayIndex) => {
     const dayOfWeek = day.getDay(); // 0 = Sunday, 6 = Saturday
     
-    // Skip if this day of week is not active
-    if (!rules.activeDaysOfWeek[dayOfWeek]) {
-      return;
-    }
-
     // Create shifts based on shiftStartTimes array
     rules.shiftStartTimes.forEach((shiftTime, shiftIndex) => {
+      // Check if this specific shift type is active on this day
+      const activeDays = shiftTime.activeDaysOfWeek || rules.activeDaysOfWeek;
+      
+      if (!activeDays[dayOfWeek]) {
+        return; // Skip this shift on this day
+      }
+      
       shifts.push({
         id: `shift-${shiftIndex}-day-${dayIndex}`,
         date: day,
@@ -265,14 +267,13 @@ export const defaultRules: ScheduleRules = {
     { label: 'Night Shift', startTime: '19:00', endTime: '07:00', requiredStaff: 2 },
   ],
   shiftTransitionRules: [
-    // Default: Day Shift to Day Shift - consecutive days allowed
-    { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, consecutive: true },
-    // Default: Day Shift to Night Shift - same day not allowed
-    { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, consecutive: false },
-    // Default: Night Shift to Day Shift - need 2 days rest after night
-    { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, consecutive: false, minDaysOff: 2 },
-    // Default: Night Shift to Night Shift - need 2 days rest between nights
-    { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, consecutive: false, minDaysOff: 2 },
+    // Default: Day Shift to Day Shift - up to 4 consecutive days allowed
+    { fromShiftIndex: 0, toShiftIndex: 0, sameDay: false, minDaysOff: 0, maxConsecutive: 4 },
+    // Default: Day Shift to Night Shift - not allowed consecutively
+    { fromShiftIndex: 0, toShiftIndex: 1, sameDay: false, minDaysOff: 0, maxConsecutive: 0 },
+    // Default: Night Shift to Day Shift - need 2 days rest after night, not allowed consecutively
+    { fromShiftIndex: 1, toShiftIndex: 0, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
+    // Default: Night Shift to Night Shift - need 2 days rest between nights, not allowed consecutively
+    { fromShiftIndex: 1, toShiftIndex: 1, sameDay: false, minDaysOff: 2, maxConsecutive: 0 },
   ],
-  maxConsecutiveShifts: 4,
 };
